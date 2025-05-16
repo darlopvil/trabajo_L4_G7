@@ -72,16 +72,16 @@ ResultadoMontecarlo montecarlo_paralelo(long long samples) {
     resultado.samples = samples;
     resultado.es_paralelo = true;
 
-    a = omp_get_num_procs();
-    int num_threads = 8; // Número de hilos disponibles
+	a = omp_get_num_procs(); // Obtener el número de procesadores disponibles
+    int num_threads = 4; // Número de hilos disponibles
     omp_set_num_threads(num_threads);
     resultado.num_hilos = num_threads;
 
     // Crear array de semillas con tamaño adecuado
     unsigned short* xi = new unsigned short[num_threads];
-    srand(time(NULL)); // Semilla base basada en tiempo actual
+	srand(time(NULL)); // Inicializa el generador de números aleatorios con su semilla
     for (int j = 0; j < num_threads; j++) {
-        xi[j] = rand() % 10000 + 1; // Generar semillas aleatorias diferentes
+		xi[j] = rand() % 10000 + 1; // Genera semillas aleatorias entre 1 y 10000
     }
 
     inicio = omp_get_wtime();
@@ -127,17 +127,23 @@ ResultadoMontecarlo montecarlo_paralelo(long long samples) {
     return resultado;
 }
 
-// Función para guardar los resultados en un archivo CSV
-void guardar_csv(const ResultadoMontecarlo& secuencial, const ResultadoMontecarlo& paralelo, const char* nombre_archivo) {
-    std::ofstream archivo(nombre_archivo);
+// Función para guardar los resultados en un archivo CSV con soporte para múltiples pruebas
+void guardar_csv(const ResultadoMontecarlo& secuencial, const ResultadoMontecarlo& paralelo,
+    const char* nombre_archivo, bool primera_escritura = true) {
+    // Modo de apertura: si es primera escritura, crea nuevo archivo, sino añade
+    std::ofstream archivo;
+
+    if (primera_escritura) {
+        archivo.open(nombre_archivo); // Sobreescribe el archivo
+    }
+    else {
+        archivo.open(nombre_archivo, std::ios::app); // Añade al archivo existente
+    }
 
     if (!archivo.is_open()) {
         printf("Error: No se pudo abrir el archivo %s para escritura\n", nombre_archivo);
         return;
     }
-
-    // Usar punto y coma como separador y coma como decimal
-    archivo << "Metodo;Samples;Hilos;Valor Pi;Tiempo (s);Tiempo (ms);Tiempo (us)\n";
 
     // Función para formatear números con coma decimal y precisión específica
     auto formatearDecimal = [](double valor, int precision) -> std::string {
@@ -152,48 +158,67 @@ void guardar_csv(const ResultadoMontecarlo& secuencial, const ResultadoMontecarl
         return resultado;
         };
 
+    // Escribir cabecera solo si es la primera escritura
+    if (primera_escritura) {
+        // Usar punto y coma como separador y coma como decimal
+        archivo << "Samples;Método;Hilos;Valor Pi;Tiempo (s);Tiempo (ms);Tiempo (us)\n";
+    }
+
     // Escribir datos secuenciales
-    archivo << "Secuencial;" << secuencial.samples << ";" << secuencial.num_hilos << ";"
+    archivo << secuencial.samples << ";Secuencial;" << secuencial.num_hilos << ";"
         << formatearDecimal(secuencial.pi, 12) << ";"
         << formatearDecimal(secuencial.tiempo_segundos, 12) << ";"
         << formatearDecimal(secuencial.tiempo_ms, 8) << ";"
         << formatearDecimal(secuencial.tiempo_us, 8) << "\n";
 
     // Escribir datos paralelos
-    archivo << "Paralelo;" << paralelo.samples << ";" << paralelo.num_hilos << ";"
+    archivo << paralelo.samples << ";Paralelo;" << paralelo.num_hilos << ";"
         << formatearDecimal(paralelo.pi, 12) << ";"
         << formatearDecimal(paralelo.tiempo_segundos, 12) << ";"
         << formatearDecimal(paralelo.tiempo_ms, 8) << ";"
         << formatearDecimal(paralelo.tiempo_us, 8) << "\n";
 
     archivo.close();
-    printf("Resultados guardados en: %s\n", nombre_archivo);
 }
-
 
 
 // Función principal que ejecuta ambos métodos
 int main(int argc, char* argv[]) {
-    long long samples = 3000;
+    // Array con los tamaños de muestra a probar
+    long long tamanos_muestra[] = { 3000, 300000, 3000000 };
+    int num_pruebas = sizeof(tamanos_muestra) / sizeof(tamanos_muestra[0]);
 
-    // Modificar las samples por consola si es necesario
-    if (argc > 1)
-        samples = atoll(argv[1]);
+    // Si se pasa un argumento por consola, solo ejecutar con ese tamaño
+    if (argc > 1) {
+        tamanos_muestra[0] = atoll(argv[1]);
+        num_pruebas = 1;
+    }
 
-    // Ejecutamos la versión secuencial
-    ResultadoMontecarlo resultado_secuencial = montecarlo_secuencial(samples);
+    const char* nombre_archivo = "resultados_montecarlo_todos.csv";
+    printf("\n====== INICIANDO PRUEBAS CON DIFERENTES TAMANYOS DE MUESTRA ======\n\n");
 
-    // Ejecutamos la versión paralela
-    ResultadoMontecarlo resultado_paralelo = montecarlo_paralelo(samples);
+    for (int i = 0; i < num_pruebas; i++) {
+        long long samples = tamanos_muestra[i];
+        printf("\n\n======= PRUEBA CON %lld MUESTRAS =======\n\n", samples);
 
-    // Comparamos resultados
-    printf("Comparacion de resultados:\n");
-    printf("PI secuencial: %.12f\n", resultado_secuencial.pi);
-    printf("PI paralelo:   %.12f\n", resultado_paralelo.pi);
-    printf("Diferencia:    %.12f\n", fabs(resultado_secuencial.pi - resultado_paralelo.pi));
-    
-    // Guardar resultados en CSV
-    guardar_csv(resultado_secuencial, resultado_paralelo, "resultados_montecarlo.csv");
+        // Ejecutar versiones secuencial y paralela
+        ResultadoMontecarlo resultado_secuencial = montecarlo_secuencial(samples);
+        ResultadoMontecarlo resultado_paralelo = montecarlo_paralelo(samples);
+
+
+        // Comparar resultados
+        printf("Comparacion de resultados:\n");
+        printf("PI secuencial: %.12f\n", resultado_secuencial.pi);
+        printf("PI paralelo:   %.12f\n", resultado_paralelo.pi);
+        printf("Diferencia:    %.12f\n", fabs(resultado_secuencial.pi - resultado_paralelo.pi));
+
+        // Primera iteración crea nuevo archivo, las siguientes añaden
+        guardar_csv(resultado_secuencial, resultado_paralelo, nombre_archivo, i == 0);
+    }
+
+    printf("\nTodos los resultados guardados en: %s\n", nombre_archivo);
+    printf("\n====== TODAS LAS PRUEBAS COMPLETADAS ======\n");
 
     return 0;
 }
+
