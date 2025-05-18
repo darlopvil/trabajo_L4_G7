@@ -254,7 +254,7 @@ void guardar_csv(const ResultadoMontecarlo& secuencial, const ResultadoMontecarl
 		<< formatearDecimal(secuencial.tiempo_us, 8) << "\n";
 
 	// Escribir resultados del método paralelo
-	archivo << paralelo.samples << ";Paralelo;" << paralelo.num_hilos << ";"
+	archivo << paralelo.samples << ";OpenMP;" << paralelo.num_hilos << ";"
 		<< formatearDecimal(paralelo.pi, 12) << ";"
 		<< formatearDecimal(paralelo.tiempo_segundos, 12) << ";"
 		<< formatearDecimal(paralelo.tiempo_ms, 8) << ";"
